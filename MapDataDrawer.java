@@ -1,6 +1,8 @@
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
+import javax.imageio.ImageIO;
 
 public class MapDataDrawer
 {
@@ -8,21 +10,34 @@ public class MapDataDrawer
    private int[][] grid;
 
    public MapDataDrawer(String filename, int rows, int cols){
-      // initialize grid
-      //read the data from the file into the grid
       grid = new int[rows][cols];
-      try {
-         Scanner sc = new Scanner(new File(filename));
-         for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-               grid[i][j] = sc.nextInt();
+      if (filename.toLowerCase().endsWith(".png")) {
+         try {
+            File imgFile = new File(filename);
+            BufferedImage img = ImageIO.read(imgFile);
+            for (int i = 0; i < rows; i++) {
+               for (int j = 0; j < cols; j++) {
+                  int rgb = img.getRGB(j, i);
+                  int red = (rgb >> 16) & 0xFF;
+                  grid[i][j] = red;
+               }
             }
+         } catch (IOException e) {
+            System.out.println("Error reading PNG file: " + filename);
          }
-         sc.close();
-      } catch (FileNotFoundException e) {
-         System.out.println("File not found: " + filename);
+      } else {
+         try {
+            Scanner sc = new Scanner(new File(filename));
+            for (int i = 0; i < rows; i++) {
+               for (int j = 0; j < cols; j++) {
+                  grid[i][j] = sc.nextInt();
+               }
+            }
+            sc.close();
+         } catch (FileNotFoundException e) {
+            System.out.println("File not found: " + filename);
+         }
       }
-
    }
 
    /**
