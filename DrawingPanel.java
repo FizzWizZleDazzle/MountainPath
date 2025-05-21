@@ -35,6 +35,17 @@ public class DrawingPanel implements ActionListener {
     private JLabel statusBar;     // status bar showing mouse position
     private long createTime;
 
+    // Variables for dragging
+    private int dragOffsetX = 0, dragOffsetY = 0;
+    private int dragStartX = 0, dragStartY = 0;
+    private int imagePosX = 0, imagePosY = 0;
+    private JLabel imageLabel; // Make this a field for access
+
+    private double zoomFactor = 1.0;
+    private final double ZOOM_STEP = 1.25;
+    private final double MIN_ZOOM = 0.1;
+    private final double MAX_ZOOM = 10.0;
+
     static {
         TARGET_IMAGE_FILE_NAME = System.getProperty(DUMP_IMAGE_PROPERTY_NAME);
         DUMP_IMAGE = (TARGET_IMAGE_FILE_NAME != null);
@@ -49,23 +60,59 @@ public class DrawingPanel implements ActionListener {
         this.statusBar = new JLabel(" ");
         this.statusBar.setBorder(BorderFactory.createLineBorder(Color.BLACK));
 
-        this.panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        this.panel = new JPanel(null) {
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(width, height);
+            }
+        };
         this.panel.setBackground(Color.WHITE);
-        this.panel.setPreferredSize(new Dimension(width, height));
-        this.panel.add(new JLabel(new ImageIcon(image)));
+        imageLabel = new JLabel(new ImageIcon(image));
+        imageLabel.setBounds(0, 0, width, height);
+        this.panel.add(imageLabel);
 
-        // listen to mouse movement
+        // listen to mouse movement and dragging
         MouseInputAdapter listener = new MouseInputAdapter() {
+            @Override
             public void mouseMoved(MouseEvent e) {
                 DrawingPanel.this.statusBar.setText("(" + e.getX() + ", " + e.getY() + ")");
             }
 
+            @Override
             public void mouseExited(MouseEvent e) {
                 DrawingPanel.this.statusBar.setText(" ");
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                dragStartX = e.getX() - imagePosX;
+                dragStartY = e.getY() - imagePosY;
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                imagePosX = e.getX() - dragStartX;
+                imagePosY = e.getY() - dragStartY;
+                imageLabel.setLocation(imagePosX, imagePosY);
+                panel.repaint();
             }
         };
         this.panel.addMouseListener(listener);
         this.panel.addMouseMotionListener(listener);
+
+        // Add key listener for + and - zoom
+        this.panel.setFocusable(true);
+        this.panel.requestFocusInWindow();
+        this.panel.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyChar() == '+') {
+                    zoomIn();
+                } else if (e.getKeyChar() == '-') {
+                    zoomOut();
+                }
+            }
+        });
 
         this.g2 = (Graphics2D)image.getGraphics();
         this.g2.setColor(Color.BLACK);
@@ -155,5 +202,56 @@ public class DrawingPanel implements ActionListener {
     // makes drawing panel become the frontmost window on the screen
     public void toFront() {
         this.frame.toFront();
+    }
+
+    /**
+     * Zooms in on the image (increases zoom factor).
+     */
+    public void zoomIn() {
+        setZoom(zoomFactor * ZOOM_STEP);
+    }
+
+    /**
+     * Zooms out on the image (decreases zoom factor).
+     */
+    public void zoomOut() {
+        setZoom(zoomFactor / ZOOM_STEP);
+    }
+
+    /**
+     * Sets the zoom factor and updates the displayed image.
+     */
+    public void setZoom(double newZoom) {
+        zoomFactor = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+        int dispW = (int)(width * zoomFactor);
+        int dispH = (int)(height * zoomFactor);
+        BufferedImage scaled = new BufferedImage(dispW, dispH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = scaled.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.drawImage(image, 0, 0, dispW, dispH, null);
+        g2d.dispose();
+        panel.removeAll();
+        imageLabel = new JLabel(new ImageIcon(scaled));
+        imageLabel.setBounds(imagePosX, imagePosY, dispW, dispH);
+        panel.setLayout(null);
+        panel.setPreferredSize(new Dimension(dispW, dispH));
+        panel.add(imageLabel);
+        panel.revalidate();
+        panel.repaint();
+        frame.pack();
+    }
+
+    /**
+     * Rescales the displayed image to fit the screen size, keeping aspect ratio.
+     * Drawing operations remain on the original image.
+     */
+    public void rescaleToScreen() {
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        int maxW = (int)(screen.width * 0.9);
+        int maxH = (int)(screen.height * 0.9);
+        double scale = Math.min(1.0, Math.min((double)maxW / width, (double)maxH / height));
+        setZoom(scale);
     }
 }
